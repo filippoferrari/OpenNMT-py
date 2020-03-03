@@ -39,6 +39,12 @@ def build_loss_compute(model, tgt_field, opt, train=True):
         criterion = LabelSmoothingLoss(
             opt.label_smoothing, len(tgt_field.vocab), ignore_index=padding_idx
         )
+    elif opt.risk_min == 'irm' and opt.label_smoothing > 0 and train:
+        # TODO add command line arguments
+        criterion = IRMLoss(
+            device, opt.risk_penalty_weight, opt.risk_anneal_iters, 
+            opt.label_smoothing, len(tgt_field.vocab), ignore_index=padding_idx
+        )
     elif isinstance(model.generator[-1], LogSparsemax):
         criterion = SparsemaxLoss(ignore_index=padding_idx, reduction='sum')
     else:
@@ -48,7 +54,7 @@ def build_loss_compute(model, tgt_field, opt, train=True):
     # probabilities, only the first part of the generator needs to be
     # passed to the NMTLossCompute. At the moment, the only supported
     # loss function of this kind is the sparsemax loss.
-    use_raw_logits = isinstance(criterion, SparsemaxLoss)
+    use_raw_logits = isinstance(criterion, (SparsemaxLoss, IRMLoss))
     loss_gen = model.generator[0] if use_raw_logits else model.generator
     if opt.copy_attn:
         compute = onmt.modules.CopyGeneratorLossCompute(
@@ -219,6 +225,57 @@ class LabelSmoothingLoss(nn.Module):
         model_prob.masked_fill_((target == self.ignore_index).unsqueeze(1), 0)
 
         return F.kl_div(output, model_prob, reduction='sum')
+
+
+class IRMLoss(LabelSmoothingLoss):
+    """
+    Invariant Risk Minimization (Arjovsky et al. 2019)
+    
+    Given a set of training environments (datasets), loss is the sum of 
+    regularised loss on each environment. The regularisation is designed to 
+    induce a predictor that is invariant to environment-specific features, 
+    to improve generalisation.
+
+    This class implements the regularised loss for one dataset. The 
+    sum over datasets must be computed elsewhere.
+    """
+    def __init__(self, device, penalty_weight, penalty_anneal_iters,
+        label_smoothing, tgt_vocab_size, ignore_index=-100):
+        super(IRMLoss, self).__init__(label_smoothing, tgt_vocab_size, 
+            ignore_index=ignore_index)
+        self.device = device
+        self.penalty_weight = penalty_weight
+        self.penalty_anneal_iters = penalty_anneal_iters
+        self.step = 0  # for scheduling penalty weight
+        # Create partial generator assuming no copy_attn and softmax
+        # Outputs passed to forward() will already be logits
+        self.generator = nn.Sequential(
+            Cast(torch.float32),
+            nn.LogSoftmax(dim=-1)
+        )
+
+    def base_loss(self, logits, target):
+        # Base loss function takes probabilities as input
+        prob = self.generator(logits)
+        return super(IRMLoss, self).forward(prob, target)
+
+    def penalty(self, logits, target):
+        scale = torch.tensor(1.).to(self.device).requires_grad_()
+        scaled_logits = logits * scale
+        loss = self.base_loss(scaled_logits, target)
+        grad = torch.autograd.grad(loss, [scale], create_graph=True)[0]
+        # Squared norm of gradients
+        return torch.sum(grad**2)
+
+    def forward(self, logits, target):
+        loss = self.base_loss(logits, target).clone()
+        penalty = self.penalty(logits, target)
+        penalty_weight = (self.penalty_weight 
+            if self.step >= self.penalty_anneal_iters else 1.0)
+        loss += penalty_weight * penalty
+        if penalty_weight > 1.0:
+            # Rescale the entire loss to keep gradients in a reasonable range
+            loss /= penalty_weight
 
 
 class NMTLossCompute(LossComputeBase):

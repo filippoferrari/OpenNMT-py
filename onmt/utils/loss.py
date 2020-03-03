@@ -246,7 +246,7 @@ class IRMLoss(LabelSmoothingLoss):
         self.device = device
         self.penalty_weight = penalty_weight
         self.penalty_anneal_iters = penalty_anneal_iters
-        self.step = 0  # for scheduling penalty weight
+        self.step = 0  # TODO for scheduling penalty weight
         # Create partial generator assuming no copy_attn and softmax
         # Outputs passed to forward() will already be logits
         self.generator = nn.Sequential(
@@ -260,16 +260,21 @@ class IRMLoss(LabelSmoothingLoss):
         return super(IRMLoss, self).forward(prob, target)
 
     def penalty(self, logits, target):
+        # Dummy classifier model
         scale = torch.tensor(1.).to(self.device).requires_grad_()
+        # Map from logits to loss via classifier
         scaled_logits = logits * scale
         loss = self.base_loss(scaled_logits, target)
+        # Compute gradient of loss w.r.t. classifier
         grad = torch.autograd.grad(loss, [scale], create_graph=True)[0]
-        # Squared norm of gradients
+        # Penalty is squared norm of gradients
         return torch.sum(grad**2)
 
     def forward(self, logits, target):
         loss = self.base_loss(logits, target).clone()
         penalty = self.penalty(logits, target)
+        # Step-change schedule for penalty weighting
+        # TODO try other scheduling functions
         penalty_weight = (self.penalty_weight 
             if self.step >= self.penalty_anneal_iters else 1.0)
         loss += penalty_weight * penalty

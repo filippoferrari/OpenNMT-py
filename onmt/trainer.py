@@ -227,6 +227,10 @@ class Trainer(object):
             # UPDATE DROPOUT
             self._maybe_update_dropout(step)
 
+            if hasattr(self.train_loss.criterion, 'step'):
+                # Let the loss know the current step for scheduling purposes
+                self.train_loss.criterion.step = step
+
             if self.gpu_verbose_level > 1:
                 logger.info("GpuRank %d: index: %d", self.gpu_rank, i)
             if self.gpu_verbose_level > 0:

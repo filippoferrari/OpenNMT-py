@@ -40,10 +40,10 @@ def build_loss_compute(model, tgt_field, opt, train=True):
             opt.label_smoothing, len(tgt_field.vocab), ignore_index=padding_idx
         )
     elif opt.risk_min == 'irm' and opt.label_smoothing > 0 and train:
-        # TODO add command line arguments
         criterion = IRMLoss(
-            device, opt.risk_penalty_weight, opt.risk_anneal_iters, 
-            opt.label_smoothing, len(tgt_field.vocab), ignore_index=padding_idx
+            device, len(opt.data_ids), opt.risk_penalty_weight, 
+            opt.risk_anneal_steps, opt.label_smoothing, len(tgt_field.vocab),
+            ignore_index=padding_idx
         )
     elif isinstance(model.generator[-1], LogSparsemax):
         criterion = SparsemaxLoss(ignore_index=padding_idx, reduction='sum')
@@ -239,11 +239,12 @@ class IRMLoss(LabelSmoothingLoss):
     This class implements the regularised loss for one dataset. The 
     sum over datasets must be computed elsewhere.
     """
-    def __init__(self, device, penalty_weight, penalty_anneal_iters,
+    def __init__(self, device, num_envs, penalty_weight, penalty_anneal_iters,
         label_smoothing, tgt_vocab_size, ignore_index=-100):
         super(IRMLoss, self).__init__(label_smoothing, tgt_vocab_size, 
             ignore_index=ignore_index)
         self.device = device
+        self.num_envs = num_envs
         self.penalty_weight = penalty_weight
         self.penalty_anneal_iters = penalty_anneal_iters
         self.step = 0  # TODO for scheduling penalty weight
@@ -270,17 +271,23 @@ class IRMLoss(LabelSmoothingLoss):
         # Penalty is squared norm of gradients
         return torch.sum(grad**2)
 
+    def get_penalty_weight(self):
+        # TODO try other scheduling functions
+        # Step-change schedule for penalty weighting
+        return (self.penalty_weight 
+            if self.step >= self.penalty_anneal_iters else 1.0)
+
     def forward(self, logits, target):
         loss = self.base_loss(logits, target).clone()
         penalty = self.penalty(logits, target)
-        # Step-change schedule for penalty weighting
-        # TODO try other scheduling functions
-        penalty_weight = (self.penalty_weight 
-            if self.step >= self.penalty_anneal_iters else 1.0)
+        penalty_weight = self.get_penalty_weight()
         loss += penalty_weight * penalty
         if penalty_weight > 1.0:
             # Rescale the entire loss to keep gradients in a reasonable range
             loss /= penalty_weight
+        # Normalise to give average over environments when summed later
+        loss /= self.num_envs
+        return loss
 
 
 class NMTLossCompute(LossComputeBase):

@@ -580,6 +580,18 @@ def train_opts(parser):
               help="Using grayscale image can training "
                    "model faster and smaller")
 
+    # Risk minimization
+    group.add('--risk_min', '-risk_min', type=str, default=None,
+              choices=[None, "irm", "rex"],
+              help="Method of risk minimization to use.")
+    group.add('--risk_anneal_steps', '-risk_anneal_steps', 
+              type=int, default=50000,
+              help="Increase (or begin increasing) the risk penalty after "
+                   "this many training steps")
+    group.add('--risk_penalty_weight', '-risk_penalty_weight', 
+              type=float, default=10000.0,
+              help="Scale of the risk penalty (once it is active)")
+
 
 def translate_opts(parser):
     """ Translation / inference options """

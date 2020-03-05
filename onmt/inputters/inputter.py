@@ -699,6 +699,9 @@ class MultipleDatasetIterator(object):
             yield next(iterator)
 
     def __iter__(self):
+        for batch in self._iter_examples():
+            yield batch        
+        '''
         while True:
             for minibatch in _pool(
                     self._iter_examples(),
@@ -712,7 +715,7 @@ class MultipleDatasetIterator(object):
                 yield torchtext.data.Batch(minibatch,
                                            self.iterables[0].dataset,
                                            self.device)
-
+        ''' 
 
 class DatasetLazyIter(object):
     """Yield data from sharded dataset files.
@@ -779,6 +782,7 @@ class DatasetLazyIter(object):
             paths = cycle(paths)
         for path in paths:
             for batch in self._iter_dataset(path):
+                logger.info('Loading batch of size %d using dataset %s' % (batch.batch_size, path))
                 yield batch
                 num_batches += 1
         if self.is_train and not self.repeat and \
@@ -830,6 +834,7 @@ def build_dataset_iter(corpus_type, fields, opt, is_train=True, multi=False):
             raise ValueError('Training data %s not found' % dataset_glob)
         else:
             return None
+    multi = False
     if multi:
         batch_size = 1
         batch_fn = None

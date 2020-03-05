@@ -234,10 +234,10 @@ class IRMLoss(LabelSmoothingLoss):
     Given a set of training environments (datasets), loss is the sum of 
     regularised loss on each environment. The regularisation is designed to 
     induce a predictor that is invariant to environment-specific features, 
-    to improve generalisation.
+    and thus improve generalisation.
 
     This class implements the regularised loss for one dataset. The 
-    sum over datasets must be computed elsewhere.
+    sum over datasets must be computed elsewhere, e.g. gradient accumulation.
     """
     def __init__(self, num_envs, penalty_weight, penalty_anneal_steps,
         label_smoothing, tgt_vocab_size, ignore_index=-100, device="cpu"):
@@ -278,6 +278,7 @@ class IRMLoss(LabelSmoothingLoss):
             if self.step >= self.penalty_anneal_steps else 1.0)
 
     def forward(self, logits, target):
+        # Not sure if clone is necessary, but it matches the source to be safe
         loss = self.base_loss(logits, target).clone()
         penalty = self.penalty(logits, target)
         penalty_weight = self.get_penalty_weight()
@@ -285,7 +286,7 @@ class IRMLoss(LabelSmoothingLoss):
         if penalty_weight > 1.0:
             # Rescale the entire loss to keep gradients in a reasonable range
             loss /= penalty_weight
-        # Normalise to give average over environments when summed later
+        # Normalise to give the average after gradients are accumulated
         loss /= self.num_envs
         return loss
 

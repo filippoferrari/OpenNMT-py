@@ -41,9 +41,9 @@ def build_loss_compute(model, tgt_field, opt, train=True):
         )
     elif opt.risk_min == 'irm' and opt.label_smoothing > 0 and train:
         criterion = IRMLoss(
-            device, len(opt.data_ids), opt.risk_penalty_weight, 
-            opt.risk_anneal_steps, opt.label_smoothing, len(tgt_field.vocab),
-            ignore_index=padding_idx
+            len(opt.data_ids), opt.risk_penalty_weight, opt.risk_anneal_steps,
+            opt.label_smoothing, len(tgt_field.vocab),
+            ignore_index=padding_idx, device=device,
         )
     elif isinstance(model.generator[-1], LogSparsemax):
         criterion = SparsemaxLoss(ignore_index=padding_idx, reduction='sum')
@@ -239,14 +239,14 @@ class IRMLoss(LabelSmoothingLoss):
     This class implements the regularised loss for one dataset. The 
     sum over datasets must be computed elsewhere.
     """
-    def __init__(self, device, num_envs, penalty_weight, penalty_anneal_iters,
-        label_smoothing, tgt_vocab_size, ignore_index=-100):
+    def __init__(self, num_envs, penalty_weight, penalty_anneal_steps,
+        label_smoothing, tgt_vocab_size, ignore_index=-100, device="cpu"):
         super(IRMLoss, self).__init__(label_smoothing, tgt_vocab_size, 
             ignore_index=ignore_index)
         self.device = device
         self.num_envs = num_envs
         self.penalty_weight = penalty_weight
-        self.penalty_anneal_iters = penalty_anneal_iters
+        self.penalty_anneal_steps = penalty_anneal_steps
         self.step = 0  # TODO for scheduling penalty weight
         # Create partial generator assuming no copy_attn and softmax
         # Outputs passed to forward() will already be logits
@@ -275,7 +275,7 @@ class IRMLoss(LabelSmoothingLoss):
         # TODO try other scheduling functions
         # Step-change schedule for penalty weighting
         return (self.penalty_weight 
-            if self.step >= self.penalty_anneal_iters else 1.0)
+            if self.step >= self.penalty_anneal_steps else 1.0)
 
     def forward(self, logits, target):
         loss = self.base_loss(logits, target).clone()

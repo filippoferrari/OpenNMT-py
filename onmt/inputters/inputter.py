@@ -782,7 +782,8 @@ class DatasetLazyIter(object):
             paths = cycle(paths)
         for path in paths:
             for batch in self._iter_dataset(path):
-                logger.info('Loading batch of size %d using dataset %s' % (batch.batch_size, path))
+                # if 'train' in path:
+                #     logger.info('Loading batch of size %d using dataset %s' % (batch.batch_size, path))
                 yield batch
                 num_batches += 1
         if self.is_train and not self.repeat and \

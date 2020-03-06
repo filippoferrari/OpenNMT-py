@@ -217,6 +217,9 @@ class Trainer(object):
             logger.info('Start training loop and validate every %d steps...',
                         valid_steps)
 
+        logger.info(f'Train loss criterion: {self.train_loss.criterion}')
+        logger.info(f'Valid loss criterion: {self.valid_loss.criterion}')
+
         total_stats = onmt.utils.Statistics()
         report_stats = onmt.utils.Statistics()
         self._start_report_manager(start_time=total_stats.start_time)
@@ -230,6 +233,8 @@ class Trainer(object):
             if hasattr(self.train_loss.criterion, 'step'):
                 # Let the loss know the current step for scheduling purposes
                 self.train_loss.criterion.step = step
+                # logger.info(f'Latest base loss: {self.train_loss.criterion.current_loss}')
+                # logger.info(f'Latest penalty: {self.train_loss.criterion.current_penalty}')
 
             if self.gpu_verbose_level > 1:
                 logger.info("GpuRank %d: index: %d", self.gpu_rank, i)
@@ -412,6 +417,7 @@ class Trainer(object):
         # in case of multi step gradient accumulation,
         # update only after accum batches
         if self.accum_count > 1:
+            # logger.info(f'Accumulating {self.accum_count} gradients')
             if self.n_gpu > 1:
                 grads = [p.grad.data for p in self.model.parameters()
                          if p.requires_grad

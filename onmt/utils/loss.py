@@ -250,6 +250,10 @@ class IRMLoss(LabelSmoothingLoss):
         self.penalty_weight = penalty_weight
         self.penalty_anneal_steps = penalty_anneal_steps
         self.step = 0  # TODO for scheduling penalty weight
+
+        self.current_loss = None
+        self.current_penalty = None
+
         # Create partial generator assuming no copy_attn and softmax
         # Outputs passed to forward() will already be logits
         self.generator = nn.Sequential(
@@ -282,14 +286,20 @@ class IRMLoss(LabelSmoothingLoss):
     def forward(self, logits, target):
         # Not sure if clone is necessary, but it matches the source to be safe
         loss = self.base_loss(logits, target).clone()
+        self.current_loss = loss
+
         penalty = self.penalty(logits, target)
         penalty_weight = self.get_penalty_weight()
-        loss += penalty_weight * penalty
+        scaled_penalty = penalty_weight * penalty
+        self.current_penalty = scaled_penalty
+        loss += scaled_penalty
+
         if penalty_weight > 1.0:
             # Rescale the entire loss to keep gradients in a reasonable range
             loss /= penalty_weight
         # Normalise to give the average after gradients are accumulated
         loss /= self.num_envs
+
         return loss
 
 

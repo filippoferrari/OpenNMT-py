@@ -10,6 +10,7 @@ import torch.nn.functional as F
 import onmt
 from onmt.modules.sparse_losses import SparsemaxLoss
 from onmt.modules.sparse_activations import LogSparsemax
+from onmt.modules.util_class import Cast
 
 
 def build_loss_compute(model, tgt_field, opt, train=True):
@@ -36,15 +37,16 @@ def build_loss_compute(model, tgt_field, opt, train=True):
             unk_index=unk_idx, ignore_index=padding_idx
         )
     elif opt.label_smoothing > 0 and train:
-        criterion = LabelSmoothingLoss(
-            opt.label_smoothing, len(tgt_field.vocab), ignore_index=padding_idx
-        )
-    elif opt.risk_min == 'irm' and opt.label_smoothing > 0 and train:
-        criterion = IRMLoss(
-            len(opt.data_ids), opt.risk_penalty_weight, opt.risk_anneal_steps,
-            opt.label_smoothing, len(tgt_field.vocab),
-            ignore_index=padding_idx, device=device,
-        )
+        if opt.risk_min == 'irm':
+            criterion = IRMLoss(
+                len(opt.data_ids), opt.risk_penalty_weight, opt.risk_anneal_steps,
+                opt.label_smoothing, len(tgt_field.vocab),
+                ignore_index=padding_idx, device=device,
+            )
+        else:
+            criterion = LabelSmoothingLoss(
+                opt.label_smoothing, len(tgt_field.vocab), ignore_index=padding_idx
+            )
     elif isinstance(model.generator[-1], LogSparsemax):
         criterion = SparsemaxLoss(ignore_index=padding_idx, reduction='sum')
     else:

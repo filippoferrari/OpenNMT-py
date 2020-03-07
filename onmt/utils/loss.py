@@ -302,12 +302,12 @@ class IRMLoss(LabelSmoothingLoss):
     def forward(self, logits, target):
         # Not sure if clone is necessary, but it matches the source to be safe
         loss = self.base_loss(logits, target).clone()
-        self.current_loss = loss
+        self.current_loss = loss.item()
 
         penalty = self.penalty(logits, target)
         penalty_weight = self.get_penalty_weight()
         scaled_penalty = penalty_weight * penalty
-        self.current_penalty = scaled_penalty
+        self.current_penalty = scaled_penalty.item()
         loss += scaled_penalty
 
         if penalty_weight > 1.0:

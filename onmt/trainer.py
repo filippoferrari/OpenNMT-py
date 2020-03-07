@@ -156,6 +156,11 @@ class Trainer(object):
                 logger.info("Updated dropout to %f from step %d"
                             % (self.dropout[i], step))
 
+    def _maybe_update_learning_rate(self, step):
+        if step >= self.train_loss.criterion.penalty_anneal_steps:
+            w = self.train_loss.criterion.penalty_weight
+            self.optim._learning_rate *= w[0] / w[1]
+
     def _accum_batches(self, iterator):
         batches = []
         normalization = 0
@@ -233,6 +238,9 @@ class Trainer(object):
             if hasattr(self.train_loss.criterion, 'step'):
                 # Let the loss know the current step for scheduling purposes
                 self.train_loss.criterion.set_step(step)
+                # self._maybe_update_learning_rate(step)
+                # logger.info(f'Latest base loss: {self.train_loss.criterion.current_loss}')
+                # logger.info(f'Latest penalty  : {self.train_loss.criterion.current_penalty}')
 
             if self.gpu_verbose_level > 1:
                 logger.info("GpuRank %d: index: %d", self.gpu_rank, i)

@@ -585,12 +585,15 @@ def train_opts(parser):
               choices=[None, "irm", "rex"],
               help="Method of risk minimization to use.")
     group.add('--risk_anneal_steps', '-risk_anneal_steps', 
-              type=int, default=50000,
+              type=int, default=25000,
               help="Increase (or begin increasing) the risk penalty after "
-                   "this many training steps")
-    group.add('--risk_penalty_weight', '-risk_penalty_weight', 
-              type=float, default=10000.0,
-              help="Scale of the risk penalty (once it is active)")
+                   "this many training steps (for step schedule)")
+    group.add('--risk_penalty_weight', '-risk_penalty_weight', nargs='+',
+              type=float, default=[0.001, 10.0], 
+              help="Weighting of the risk penalty (used in the schedule)")
+    group.add('--risk_penalty_schedule', '-risk_penalty_schedule',
+              type=str, default='step', 
+              help='Scheduling function for the risk penalty weight')
 
 
 def translate_opts(parser):

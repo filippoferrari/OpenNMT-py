@@ -39,7 +39,8 @@ def build_loss_compute(model, tgt_field, opt, train=True):
     elif opt.label_smoothing > 0 and train:
         if opt.risk_min == 'irm':
             criterion = IRMLoss(
-                len(opt.data_ids), opt.risk_penalty_weight, opt.risk_anneal_steps,
+                len(opt.data_ids), opt.risk_penalty_weight, 
+                opt.risk_penalty_schedule, opt.risk_anneal_steps,
                 opt.label_smoothing, len(tgt_field.vocab),
                 ignore_index=padding_idx, device=device,
             )
@@ -241,15 +242,20 @@ class IRMLoss(LabelSmoothingLoss):
     This class implements the regularised loss for one dataset. The 
     sum over datasets must be computed elsewhere, e.g. gradient accumulation.
     """
-    def __init__(self, num_envs, penalty_weight, penalty_anneal_steps,
-        label_smoothing, tgt_vocab_size, ignore_index=-100, device="cpu"):
+    def __init__(self, num_envs, penalty_weight, penalty_schedule,
+        penalty_anneal_steps, label_smoothing, tgt_vocab_size, 
+        ignore_index=-100, device="cpu"):
         super(IRMLoss, self).__init__(label_smoothing, tgt_vocab_size, 
             ignore_index=ignore_index)
         self.device = device
         self.num_envs = num_envs
+
+        assert type(penalty_weight) is list and len(penalty_weight) >= 2, \
+            'At least 2 penalty weights required (initial and final)'
         self.penalty_weight = penalty_weight
+        self.penalty_schedule = penalty_schedule
         self.penalty_anneal_steps = penalty_anneal_steps
-        self.step = 0  # TODO for scheduling penalty weight
+        self.step = 0
 
         self.current_loss = None
         self.current_penalty = None
@@ -277,11 +283,21 @@ class IRMLoss(LabelSmoothingLoss):
         # Penalty is squared norm of gradients
         return torch.sum(grad**2)
 
+    def set_step(self, step):
+        self.step = step
+
     def get_penalty_weight(self):
         # TODO try other scheduling functions
-        # Step-change schedule for penalty weighting
-        return (self.penalty_weight 
-            if self.step >= self.penalty_anneal_steps else 1.0)
+        if self.penalty_schedule == 'step':
+            # Step-change schedule for penalty weighting
+            if self.step < self.penalty_anneal_steps:
+                weight = self.penalty_weight[0]
+            else:
+                weight = self.penalty_weight[1]
+        else:
+            raise NotImplementedError(
+                f'Schedule "{self.penalty_schedule}" not supported')
+        return weight
 
     def forward(self, logits, target):
         # Not sure if clone is necessary, but it matches the source to be safe

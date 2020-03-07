@@ -232,9 +232,7 @@ class Trainer(object):
 
             if hasattr(self.train_loss.criterion, 'step'):
                 # Let the loss know the current step for scheduling purposes
-                self.train_loss.criterion.step = step
-                # logger.info(f'Latest base loss: {self.train_loss.criterion.current_loss}')
-                # logger.info(f'Latest penalty: {self.train_loss.criterion.current_penalty}')
+                self.train_loss.criterion.set_step(step)
 
             if self.gpu_verbose_level > 1:
                 logger.info("GpuRank %d: index: %d", self.gpu_rank, i)

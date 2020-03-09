@@ -136,6 +136,7 @@ class Trainer(object):
         self.earlystopper = earlystopper
         self.dropout = dropout
         self.dropout_steps = dropout_steps
+        self.report_every = report_every
 
         for i in range(len(self.accum_count_l)):
             assert self.accum_count_l[i] > 0
@@ -165,12 +166,12 @@ class Trainer(object):
             w = self.train_loss.criterion.penalty_weight
             self.optim._learning_rate *= w[0] / w[1]
 
-    def _update_risk_criterion(self, criterion, step, report_every):
+    def _update_risk_criterion(self, criterion, step):
         # Let the loss know the current step for scheduling purposes
         criterion.set_step(step)
         # Report base loss and penalty regularly
-        if step % report_every == 0: 
-            for j, (loss, penalty) in enumerate(zip(criterion.current_loss, 
+        if step % self.report_every == 0: 
+            for i, (loss, penalty) in enumerate(zip(criterion.current_loss, 
                 criterion.current_penalty)):
                 logger.info(f'Dataset {i}: base loss = {loss}; penalty = {penalty}')
         criterion.maybe_clear_current_values()
@@ -274,8 +275,7 @@ class Trainer(object):
                 report_stats)
             
             if type(self.train_loss.criterion) in [IRMLoss, RExLoss]:
-                self._update_risk_criterion(
-                        self.train_loss.criterion, step, report_every)
+                self._update_risk_criterion(self.train_loss.criterion, step)
 
             if valid_iter is not None and step % valid_steps == 0:
                 if self.gpu_verbose_level > 0:

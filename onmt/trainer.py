@@ -274,7 +274,7 @@ class Trainer(object):
                 self.optim.learning_rate(),
                 report_stats)
             
-            if type(self.train_loss.criterion) in [IRMLoss, RExLoss]:
+            if isinstance(self.train_loss.criterion, (IRMLoss, RExLoss)):
                 self._update_risk_criterion(self.train_loss.criterion, step)
 
             if valid_iter is not None and step % valid_steps == 0:

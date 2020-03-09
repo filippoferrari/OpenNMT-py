@@ -257,8 +257,8 @@ class IRMLoss(LabelSmoothingLoss):
         self.penalty_anneal_steps = penalty_anneal_steps
         self.step = 0
 
-        self.current_loss = None
-        self.current_penalty = None
+        self.current_loss = list()
+        self.current_penalty = list()
 
         # Create partial generator assuming no copy_attn and softmax
         # Outputs passed to forward() will already be logits
@@ -299,15 +299,20 @@ class IRMLoss(LabelSmoothingLoss):
                 f'Schedule "{self.penalty_schedule}" not supported')
         return weight
 
+    def maybe_clear_current_values(self):
+        if len(self.current_loss) >= self.num_envs:
+            self.current_loss = list()
+            self.current_penalty = list()
+
     def forward(self, logits, target):
         # Not sure if clone is necessary, but it matches the source to be safe
         loss = self.base_loss(logits, target).clone()
-        self.current_loss = loss.item()
+        self.current_loss.append(loss.item())
 
         penalty = self.penalty(logits, target)
         penalty_weight = self.get_penalty_weight()
         scaled_penalty = penalty_weight * penalty
-        self.current_penalty = scaled_penalty.item()
+        self.current_penalty.append(scaled_penalty.item())
         loss += scaled_penalty
 
         if penalty_weight > 1.0:
@@ -317,6 +322,10 @@ class IRMLoss(LabelSmoothingLoss):
         loss /= self.num_envs
 
         return loss
+
+
+class RExLoss(LabelSmoothingLoss):
+    pass
 
 
 class NMTLossCompute(LossComputeBase):

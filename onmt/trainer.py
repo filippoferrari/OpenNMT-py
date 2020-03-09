@@ -14,6 +14,7 @@ import traceback
 
 import onmt.utils
 from onmt.utils.logging import logger
+from onmt.utils.loss import IRMLoss, RExLoss
 
 
 def build_trainer(opt, device_id, model, fields, optim, model_saver=None):
@@ -161,6 +162,16 @@ class Trainer(object):
             w = self.train_loss.criterion.penalty_weight
             self.optim._learning_rate *= w[0] / w[1]
 
+    def _update_risk_criterion(self, criterion):
+        # Let the loss know the current step for scheduling purposes
+        criterion.set_step(step)
+        # Report base loss and penalty regularly
+        if step % 100 == 0:  # TODO don't hard-code this
+            for j, (loss, penalty) in enumerate(zip(criterion.current_loss, 
+                criterion.current_penalty)):
+                logger.info(f'Dataset {i}: base loss = {loss}; penalty = {penalty}')
+        criterion.maybe_clear_current_values()
+
     def _accum_batches(self, iterator):
         batches = []
         normalization = 0
@@ -235,13 +246,6 @@ class Trainer(object):
             # UPDATE DROPOUT
             self._maybe_update_dropout(step)
 
-            if hasattr(self.train_loss.criterion, 'step'):
-                # Let the loss know the current step for scheduling purposes
-                self.train_loss.criterion.set_step(step)
-                # self._maybe_update_learning_rate(step)
-                # logger.info(f'Latest base loss: {self.train_loss.criterion.current_loss}')
-                # logger.info(f'Latest penalty  : {self.train_loss.criterion.current_penalty}')
-
             if self.gpu_verbose_level > 1:
                 logger.info("GpuRank %d: index: %d", self.gpu_rank, i)
             if self.gpu_verbose_level > 0:
@@ -265,6 +269,9 @@ class Trainer(object):
                 step, train_steps,
                 self.optim.learning_rate(),
                 report_stats)
+            
+            if type(self.train_loss.criterion) in [IRMLoss, RExLoss]:
+                self._update_risk_criterion(self.train_loss.criterion)
 
             if valid_iter is not None and step % valid_steps == 0:
                 if self.gpu_verbose_level > 0:

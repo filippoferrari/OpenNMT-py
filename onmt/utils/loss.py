@@ -256,7 +256,7 @@ class IRMLoss(LabelSmoothingLoss):
         self.penalty_weight = penalty_weight
         self.penalty_schedule = penalty_schedule
         self.penalty_anneal_steps = penalty_anneal_steps
-        self.step = 0
+        self.step = 1
 
         self.current_loss = list()
         self.current_penalty = list()

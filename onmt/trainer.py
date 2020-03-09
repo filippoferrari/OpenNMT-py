@@ -47,6 +47,7 @@ def build_trainer(opt, device_id, model, fields, optim, model_saver=None):
     average_every = opt.average_every
     dropout = opt.dropout
     dropout_steps = opt.dropout_steps
+    report_every = opt.report_every
     if device_id >= 0:
         gpu_rank = opt.gpu_ranks[device_id]
     else:
@@ -71,7 +72,8 @@ def build_trainer(opt, device_id, model, fields, optim, model_saver=None):
                            model_dtype=opt.model_dtype,
                            earlystopper=earlystopper,
                            dropout=dropout,
-                           dropout_steps=dropout_steps)
+                           dropout_steps=dropout_steps,
+                           report_every=report_every)
     return trainer
 
 
@@ -108,7 +110,8 @@ class Trainer(object):
                  n_gpu=1, gpu_rank=1, gpu_verbose_level=0,
                  report_manager=None, with_align=False, model_saver=None,
                  average_decay=0, average_every=1, model_dtype='fp32',
-                 earlystopper=None, dropout=[0.3], dropout_steps=[0]):
+                 earlystopper=None, dropout=[0.3], dropout_steps=[0],
+                 report_every=100):
         # Basic attributes.
         self.model = model
         self.train_loss = train_loss
@@ -162,11 +165,11 @@ class Trainer(object):
             w = self.train_loss.criterion.penalty_weight
             self.optim._learning_rate *= w[0] / w[1]
 
-    def _update_risk_criterion(self, criterion):
+    def _update_risk_criterion(self, criterion, step, report_every):
         # Let the loss know the current step for scheduling purposes
         criterion.set_step(step)
         # Report base loss and penalty regularly
-        if step % 100 == 0:  # TODO don't hard-code this
+        if step % report_every == 0: 
             for j, (loss, penalty) in enumerate(zip(criterion.current_loss, 
                 criterion.current_penalty)):
                 logger.info(f'Dataset {i}: base loss = {loss}; penalty = {penalty}')
@@ -271,7 +274,8 @@ class Trainer(object):
                 report_stats)
             
             if type(self.train_loss.criterion) in [IRMLoss, RExLoss]:
-                self._update_risk_criterion(self.train_loss.criterion)
+                self._update_risk_criterion(
+                        self.train_loss.criterion, step, report_every)
 
             if valid_iter is not None and step % valid_steps == 0:
                 if self.gpu_verbose_level > 0:

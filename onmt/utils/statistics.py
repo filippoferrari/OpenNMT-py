@@ -78,6 +78,7 @@ class Statistics(object):
                 or not
 
         """
+        # logger.info(f'Loss to add: {stat.loss}')
         self.loss += stat.loss
         self.n_words += stat.n_words
         self.n_correct += stat.n_correct
@@ -115,12 +116,13 @@ class Statistics(object):
             step_fmt = "%s/%5d" % (step_fmt, num_steps)
         logger.info(
             ("Step %s; acc: %6.2f; ppl: %5.2f; xent: %4.2f; " +
-             "lr: %7.5f; %3.0f/%3.0f tok; %3.0f/%3.0f tok/s; %6.0f sec")
+             "lr: %7.5f; loss: %3.0f; %3.0f/%3.0f tok; %3.0f/%3.0f tok/s; %6.0f sec")
             % (step_fmt,
                self.accuracy(),
                self.ppl(),
                self.xent(),
                learning_rate,
+               self.loss,
                self.n_src_words,
                self.n_words,
                self.n_src_words / (t + 1e-5),

@@ -321,8 +321,6 @@ class IRMLoss(LabelSmoothingLoss):
         if penalty_weight > 1.0:
             # Rescale the entire loss to keep gradients in a reasonable range
             loss /= penalty_weight
-        # Normalise to give the average after gradients are accumulated
-        loss /= self.num_envs
 
         return loss
 

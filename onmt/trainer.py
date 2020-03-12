@@ -161,19 +161,21 @@ class Trainer(object):
                 logger.info("Updated dropout to %f from step %d"
                             % (self.dropout[i], step))
 
-    def _maybe_update_learning_rate(self, step):
-        if step >= self.train_loss.criterion.penalty_anneal_steps:
-            w = self.train_loss.criterion.penalty_weight
-            self.optim._learning_rate *= w[0] / w[1]
-
     def _update_risk_criterion(self, criterion, step):
         # Let the loss know the current step for scheduling purposes
         criterion.set_step(step)
+        # Update learning rate after the penalty changes, if specified
+        if (step == criterion.penalty_anneal_steps and 
+            len(criterion.penalty_weight) >= 3):
+            self.optim._learning_rate /= criterion.penalty_weight[-1]
+            logger.info('Updated base learning rate to '
+                f'{self.optim._learning_rate:1.1e}')
         # Report base loss and penalty regularly
         if step % self.report_every == 0: 
             for i, (loss, penalty) in enumerate(zip(criterion.current_loss, 
                 criterion.current_penalty)):
-                logger.info(f'Dataset {i}: base loss = {loss}; penalty = {penalty}')
+                logger.info(f'Dataset {i}: base_loss: {loss:.0f}; '
+                    f'penalty: {penalty:.0f}')
         criterion.maybe_clear_current_values()
 
     def _accum_batches(self, iterator):
@@ -430,6 +432,8 @@ class Trainer(object):
                 #    dec_state.detach()
                 if self.model.decoder.state is not None:
                     self.model.decoder.detach_state()
+
+        # TODO RExLoss: compute variance and call self.optim.backward(var) here
 
         # in case of multi step gradient accumulation,
         # update only after accum batches

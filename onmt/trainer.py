@@ -137,6 +137,7 @@ class Trainer(object):
         self.dropout = dropout
         self.dropout_steps = dropout_steps
         self.report_every = report_every
+        self.applied_lr_reduction = False
 
         for i in range(len(self.accum_count_l)):
             assert self.accum_count_l[i] > 0
@@ -165,9 +166,11 @@ class Trainer(object):
         # Let the loss know the current step for scheduling purposes
         criterion.set_step(step)
         # Update learning rate after the penalty changes, if specified
-        if (step == criterion.penalty_anneal_steps and 
+        if (not self.applied_lr_reduction and 
+            step >= criterion.penalty_anneal_steps and 
             len(criterion.penalty_weight) >= 3):
             self.optim._learning_rate /= criterion.penalty_weight[-1]
+            self.applied_lr_reduction = True
             logger.info('Updated base learning rate to '
                 f'{self.optim._learning_rate:1.1e}')
         # Report base loss and penalty regularly

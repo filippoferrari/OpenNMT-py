@@ -44,6 +44,13 @@ def build_loss_compute(model, tgt_field, opt, train=True):
                 opt.label_smoothing, len(tgt_field.vocab),
                 ignore_index=padding_idx, device=device,
             )
+        elif opt.risk_min == 'rex':
+            criterion = RExLoss(
+                len(opt.data_ids), opt.risk_penalty_weight, 
+                opt.risk_penalty_schedule, opt.risk_anneal_steps,
+                opt.label_smoothing, len(tgt_field.vocab),
+                ignore_index=padding_idx, device=device,
+            )
         else:
             criterion = LabelSmoothingLoss(
                 opt.label_smoothing, len(tgt_field.vocab), ignore_index=padding_idx
@@ -310,12 +317,12 @@ class IRMLoss(LabelSmoothingLoss):
     def forward(self, logits, target):
         # Not sure if clone is necessary, but it matches the source to be safe
         loss = self.base_loss(logits, target).clone()
-        self.current_loss.append(loss.item())
+        self.current_loss.append(loss)
 
         penalty = self.penalty(logits, target)
         penalty_weight = self.get_penalty_weight()
         scaled_penalty = penalty_weight * penalty
-        self.current_penalty.append(scaled_penalty.item())
+        self.current_penalty.append(scaled_penalty)
         loss += scaled_penalty
 
         if penalty_weight > 1.0:
@@ -325,8 +332,28 @@ class IRMLoss(LabelSmoothingLoss):
         return loss
 
 
-class RExLoss(LabelSmoothingLoss):
-    pass
+class RExLoss(IRMLoss):
+
+    def penalty(self):
+        assert len(self.current_loss) == self.num_envs,
+            'REx requires loss from all environments to compute penalty'
+
+        mean_loss = sum(self.current_loss) / self.num_envs
+        penalty = sum([(loss - mean_loss)**2 for loss in self.current_loss])
+        penalty /= self.num_envs
+
+        penalty_weight = self.get_penalty_weight()
+        scaled_penalty = penalty_weight * penalty
+        self.current_penalty = [scaled_penalty] * self.num_envs
+
+        return scaled_penalty
+
+    def forward(self, logits, target):
+        # Not sure if clone is necessary, but it matches the source to be safe
+        loss = self.base_loss(logits, target).clone()
+        self.current_loss.append(loss)
+
+        return loss
 
 
 class NMTLossCompute(LossComputeBase):

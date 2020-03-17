@@ -177,8 +177,8 @@ class Trainer(object):
         if step % self.report_every == 0: 
             for i, (loss, penalty) in enumerate(zip(criterion.current_loss, 
                 criterion.current_penalty)):
-                logger.info(f'Dataset {i}: base_loss: {loss:.0f}; '
-                    f'penalty: {penalty:.0f}')
+                logger.info(f'Dataset {i}: base_loss: {loss.item():.0f}; '
+                    f'penalty: {penalty.item():.0f}')
         criterion.maybe_clear_current_values()
 
     def _accum_batches(self, iterator):
@@ -436,7 +436,10 @@ class Trainer(object):
                 if self.model.decoder.state is not None:
                     self.model.decoder.detach_state()
 
-        # TODO RExLoss: compute variance and call self.optim.backward(var) here
+        if isinstance(self.train_loss.criterion, RExLoss):
+            # REx: compute scaled variance and accumulate gradient
+            penalty = self.train_loss.criterion.penalty()
+            penalty.div(normalization).backward()
 
         # in case of multi step gradient accumulation,
         # update only after accum batches

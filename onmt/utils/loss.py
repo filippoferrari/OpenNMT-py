@@ -179,9 +179,10 @@ class LossComputeBase(nn.Module):
             loss, stats = self._compute_loss(batch, **shard_state)
             return loss / float(normalization), stats
         batch_stats = onmt.utils.Statistics()
-        for shard in shards(shard_state, shard_size):
+        retain_graph = isinstance(self.criterion, RExLoss)  # wait for variance
+        for shard in shards(shard_state, shard_size, retain_graph=retain_graph):
             loss, stats = self._compute_loss(batch, **shard)
-            loss.div(float(normalization)).backward()
+            loss.div(float(normalization)).backward(retain_graph=retain_graph)
             batch_stats.update(stats)
         return None, batch_stats
 
@@ -335,7 +336,7 @@ class IRMLoss(LabelSmoothingLoss):
 class RExLoss(IRMLoss):
 
     def penalty(self):
-        assert len(self.current_loss) == self.num_envs,
+        assert len(self.current_loss) == self.num_envs, \
             'REx requires loss from all environments to compute penalty'
 
         mean_loss = sum(self.current_loss) / self.num_envs
@@ -466,7 +467,7 @@ def filter_shard_state(state, shard_size=None):
             yield k, (v, v_split)
 
 
-def shards(state, shard_size, eval_only=False):
+def shards(state, shard_size, eval_only=False, retain_graph=False):
     """
     Args:
         state: A dictionary which corresponds to the output of
@@ -513,4 +514,4 @@ def shards(state, shard_size, eval_only=False):
                 variables.extend(zip(torch.split(state[k], shard_size),
                                      [v_chunk.grad for v_chunk in v_split]))
         inputs, grads = zip(*variables)
-        torch.autograd.backward(inputs, grads)
+        torch.autograd.backward(inputs, grads, retain_graph=retain_graph)

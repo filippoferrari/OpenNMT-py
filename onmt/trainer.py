@@ -440,6 +440,9 @@ class Trainer(object):
             # REx: compute scaled variance and accumulate gradient
             penalty = self.train_loss.criterion.penalty()
             penalty.div(normalization).backward()
+            penalty_stats = onmt.utils.Statistics(penalty.item())
+            total_stats.update(penalty_stats)
+            report_stats.update(penalty_stats)
 
         # in case of multi step gradient accumulation,
         # update only after accum batches
